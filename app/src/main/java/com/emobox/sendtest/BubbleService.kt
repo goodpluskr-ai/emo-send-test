@@ -48,7 +48,13 @@ class BubbleService : Service() {
         running = true
         startAsForeground()
         wm = getSystemService(WindowManager::class.java)
-        addBubble()
+        try {
+            addBubble()
+        } catch (e: Exception) {
+            EmoStore.put(this, "bubble_error", "${e.javaClass.simpleName}: ${e.message}")
+            Toast.makeText(this, "떠 있는 버튼을 띄우지 못했어요: ${e.javaClass.simpleName}", Toast.LENGTH_LONG).show()
+            stopSelf()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

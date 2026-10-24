@@ -42,6 +42,7 @@ class MainActivity : Activity() {
     private lateinit var bubbleBtn: Button
     private lateinit var memo: EditText
     private val resultLabels = mutableMapOf<String, TextView>()
+    private var wantBubble = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,6 +60,10 @@ class MainActivity : Activity() {
         super.onResume()
         refreshThumbs()
         refreshKbdLog()
+        if (wantBubble && Settings.canDrawOverlays(this) && !BubbleService.running) {
+            wantBubble = false
+            startBubble()
+        }
         bubbleBtn.text = if (BubbleService.running) "떠 있는 버튼 끄기" else "떠 있는 버튼 켜기"
     }
 
@@ -221,16 +226,26 @@ class MainActivity : Activity() {
             bubbleBtn.text = "떠 있는 버튼 켜기"; return
         }
         if (!Settings.canDrawOverlays(this)) {
-            toast("‘이모 전송 시험’의 ‘다른 앱 위에 표시’를 켠 뒤 돌아와 주세요")
+            wantBubble = true
+            toast("목록에서 ‘이모 전송 시험’을 찾아 허용한 뒤 뒤로 가기를 누르세요")
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
             return
         }
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 20)
         }
-        startForegroundService(Intent(this, BubbleService::class.java))
-        bubbleBtn.text = "떠 있는 버튼 끄기"
-        toast("켜졌어요. 카톡을 열어 분홍 버튼을 눌러 보세요")
+        startBubble()
+    }
+
+    private fun startBubble() {
+        try {
+            startForegroundService(Intent(this, BubbleService::class.java))
+            bubbleBtn.text = "떠 있는 버튼 끄기"
+            toast("켜졌어요. 화면 오른쪽의 분홍 ‘이모’ 버튼을 확인하고 카톡을 열어 보세요")
+        } catch (e: Exception) {
+            EmoStore.put(this, "bubble_error", "${e.javaClass.simpleName}: ${e.message}")
+            toast("버튼을 켜지 못했어요: ${e.javaClass.simpleName}")
+        }
     }
 
     @Deprecated("Activity 기본 API 사용")
@@ -283,7 +298,7 @@ class MainActivity : Activity() {
         r.append("카카오톡: ${EmoStore.kakaoVersion(this)}\n")
         listOf("t1" to "1 복사→붙여넣기", "t2" to "2 전용 키보드", "t3" to "3 공유하기", "t4" to "4 떠 있는 버튼", "t5" to "5 받은 그림 저장")
             .forEach { (k, name) -> r.append("$name: ${EmoStore.get(this, k) ?: "안 함"}\n") }
-        EmoStore.all(this).filterKeys { it.startsWith("kbd_") || it == "bubble_last" }
+        EmoStore.all(this).filterKeys { it.startsWith("kbd_") || it.startsWith("bubble_") }
             .toSortedMap().forEach { (k, v) -> r.append("  ($k) $v\n") }
         r.append("메모: ${memo.text}\n")
         getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("시험 결과", r.toString()))
